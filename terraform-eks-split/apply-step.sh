@@ -27,7 +27,9 @@ if [ $# -lt 1 ]; then
     echo "10 - Create node group"
     echo "11 - Create CoreDNS and kube-proxy addons"
     echo "12 - Create repositories"
-    echo "13 - Apply remaining resources"
+    echo "13 - Create service accounts and trust policies"
+    echo "14 - Install AWS Load Balancer Controller"
+    echo "15 - Apply remaining resources and outputs"
     echo ""
     echo "Optional: Add 'remote' as second argument to run via terraform-remote-executor"
     exit 1
@@ -64,6 +66,13 @@ run_terraform() {
     
     echo "✅ $description completed successfully"
 }
+
+# Validate step number
+if ! [[ "$STEP" =~ ^[0-9]+$ ]] || [ "$STEP" -lt 1 ] || [ "$STEP" -gt 15 ]; then
+    echo "Invalid step number: $STEP"
+    echo "Please specify a step between 1 and 15"
+    exit 1
+fi
 
 # Apply the specific step
 case $STEP in
@@ -104,11 +113,17 @@ case $STEP in
         run_terraform "apply -target=aws_ecr_repository.backend -target=aws_ecr_repository.frontend -auto-approve" "Creating repositories"
         ;;
     13)
-        run_terraform "apply -auto-approve" "Applying remaining resources"
+        run_terraform "apply -target=aws_iam_role.backend_service_role -target=aws_iam_role_policy_attachment.dynamodb_access -target=kubernetes_service_account.backend_service_account -auto-approve" "Creating service accounts and trust policies"
+        ;;
+    14)
+        run_terraform "apply -target=aws_iam_policy.lb_controller -target=aws_iam_role.lb_controller_role -target=aws_iam_role_policy_attachment.lb_controller_attachment -target=kubernetes_service_account.lb_controller -target=helm_release.lb_controller -auto-approve" "Installing AWS Load Balancer Controller"
+        ;;
+    15)
+        run_terraform "apply -auto-approve" "Applying remaining resources and outputs"
         ;;
     *)
         echo "Invalid step number: $STEP"
-        echo "Please specify a step between 1 and 13"
+        echo "Please specify a step between 1 and 15"
         exit 1
         ;;
 esac

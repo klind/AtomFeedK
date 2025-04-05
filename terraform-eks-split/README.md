@@ -19,7 +19,8 @@ The configuration is split into multiple files for better organization:
 - `10_eks_nodes.tf` - EKS node group configuration
 - `11_eks_addons.tf` - CoreDNS and kube-proxy addons
 - `12_repositories.tf` - ECR repositories and ECS cluster
-- `13_outputs.tf` - Output values
+- `13_service_accounts.tf` - Kubernetes service account and IAM role association
+- `14_outputs.tf` - Output values
 
 ## Deployment Sequence
 
@@ -37,11 +38,13 @@ Resources are deployed in a specific order to respect dependencies:
 10. Create node group
 11. Create CoreDNS and kube-proxy addons
 12. Create repositories
-13. Apply remaining resources
+13. Create service accounts and trust policies
+14. Apply remaining resources
 
 This order ensures that resources with dependencies are created in the proper sequence, particularly:
 - VPC CNI is deployed before the node group
 - Node group is deployed before CoreDNS and kube-proxy addons
+- Service accounts are created after all required infrastructure is in place
 
 ## Deployment Scripts
 
@@ -53,47 +56,59 @@ These are wrapper scripts that allow you to choose between local and remote exec
 
 #### `deploy.sh`
 
-Master deployment script that defaults to local execution but can be configured to use remote execution:
+Master deployment script that requires an explicit execution mode:
 
 ```bash
-# Default: Local execution
-./deploy.sh 
-
-# Specify execution mode
+# You must specify an execution mode:
 ./deploy.sh local    # Use local execution
 ./deploy.sh remote   # Use remote execution
 ```
 
 #### `destroy.sh`
 
-Master cleanup script that defaults to local execution but can be configured to use remote execution:
+Master cleanup script that requires an explicit execution mode:
 
 ```bash
-# Default: Local execution
-./destroy.sh 
-
-# Specify execution mode
+# You must specify an execution mode:
 ./destroy.sh local    # Use local execution
 ./destroy.sh remote   # Use remote execution
 ```
 
 ### Remote Execution Scripts
 
-These scripts use the `terraform-remote-executor.sh` from the parent directory to run commands on a remote EC2 instance:
+These scripts use the included `terraform-remote-executor.sh` to run commands on a remote EC2 instance:
+
+#### `terraform-remote-executor.sh`
+
+Core script for executing Terraform commands on a remote EC2 instance. This script:
+- Packages the Terraform files
+- Uploads them to S3
+- Executes commands via AWS Systems Manager
+- Streams the output back to your terminal
+
+```bash
+# Direct usage
+./terraform-remote-executor.sh . "command"
+
+# Example: Run plan
+./terraform-remote-executor.sh . "plan"
+```
 
 #### `deploy-remote-executor.sh`
 
 Deploys the entire EKS infrastructure using remote execution.
 
 ```bash
+# Usually called through deploy.sh
 ./deploy-remote-executor.sh
 ```
 
 #### `destroy-remote-executor.sh`
 
-Destroys the entire EKS infrastructure using remote execution.
+Destroys the entire EKS infrastructure using remote execution and validates that all resources have been properly removed.
 
 ```bash
+# Usually called through destroy.sh
 ./destroy-remote-executor.sh
 ```
 
@@ -106,6 +121,7 @@ These scripts run Terraform commands directly on your local machine:
 Deploys the entire EKS infrastructure locally.
 
 ```bash
+# Usually called through deploy.sh
 ./deploy-local.sh
 ```
 
@@ -114,6 +130,7 @@ Deploys the entire EKS infrastructure locally.
 Destroys the entire EKS infrastructure locally.
 
 ```bash
+# Usually called through destroy.sh
 ./destroy-local.sh
 ```
 
@@ -140,7 +157,8 @@ Where `<step_number>` is the step to apply (1-13) and the optional `remote` argu
 10. Create node group
 11. Create CoreDNS and kube-proxy addons
 12. Create repositories
-13. Apply remaining resources
+13. Create service accounts and trust policies
+14. Apply remaining resources
 
 For example, to create the VPC and subnets locally:
 ```bash
@@ -172,6 +190,94 @@ After deployment, you can access the cluster using:
 aws eks update-kubeconfig --name hcm-developer-util-cluster --region eu-north-1
 ```
 
+## Accessing Deployed Applications
+
+### Load Balancer Architecture
+
+This project uses Kubernetes Services of type LoadBalancer to expose both frontend and backend applications:
+
+1. **Frontend LoadBalancer**:
+   - Public-facing AWS load balancer
+   - Created automatically by Kubernetes when applying `k8s/frontend-deployment.yaml`
+   - Provides external access to the application UI
+
+2. **Backend LoadBalancer**:
+   - Internal AWS load balancer (only accessible within the VPC)
+   - Created automatically by Kubernetes when applying `k8s/backend-service.yaml`
+   - Provides a stable endpoint for the frontend to communicate with the backend
+   - Uses Kubernetes service DNS to provide a consistent URL (`http://hcm-developer-util-backend`)
+
+This approach offers several advantages:
+- **Consistent management**: Both load balancers are managed by Kubernetes
+- **Stable backend URL**: The frontend always connects to the same URL, regardless of infrastructure changes
+- **Security**: Backend is only accessible within the cluster, not exposed publicly
+- **Simplified configuration**: No need to update URLs when recreating resources
+
+### Deploying the Applications
+
+To deploy the complete application stack:
+
+```bash
+# Apply the backend deployment (which includes the service)
+kubectl apply -f k8s/backend-deployment.yaml
+
+# Apply the frontend deployment
+kubectl apply -f k8s/frontend-deployment.yaml
+```
+
+### Accessing the Application
+
+After deployment, the frontend application will be accessible via the external load balancer:
+
+```bash
+# Get the frontend LoadBalancer address
+kubectl get svc hcm-developer-util-frontend
+```
+
+The EXTERNAL-IP column will show the public endpoint for accessing the application.
+
 ## Customization
 
-You can customize the deployment by modifying the variables in `02_variables.tf` or by passing variable overrides to the deployment scripts. 
+You can customize the deployment by modifying the variables in `02_variables.tf` or by passing variable overrides to the deployment scripts.
+
+## Validation Scripts
+
+The following scripts help validate infrastructure deployment and cleanup:
+
+#### `validate-deploy.sh`
+
+Validates that all AWS resources related to the EKS cluster have been properly created after deployment. This script:
+- Checks for an active EKS cluster
+- Verifies VPC and subnet configuration
+- Confirms node groups are running
+- Validates IAM roles exist
+- Ensures EKS addons (vpc-cni, kube-proxy, coredns) are installed
+- Confirms ECR repositories are created
+- Verifies Terraform state exists in S3
+
+```bash
+# Run directly after manual deployment
+./validate-deploy.sh
+```
+
+The validation script is automatically executed at the end of both deploy-remote-executor.sh and deploy-local.sh scripts.
+
+#### `validate-destroy.sh`
+
+Validates that all AWS resources related to the EKS cluster have been properly destroyed. This script:
+- Checks for EKS clusters
+- Checks for EC2 resources (instances, security groups)
+- Checks for VPC resources
+- Checks for IAM roles and policies
+- Checks for load balancers
+- Checks for CloudWatch logs
+- Checks for ECR repositories
+
+```bash
+# Run directly after manual destruction
+./validate-destroy.sh
+```
+
+The validation script is automatically executed at the end of both destroy-remote-executor.sh and destroy-local.sh scripts. 
+
+If the validation is successful (all resources have been properly removed), the Terraform state file in S3 will also be automatically deleted. This ensures a complete cleanup process and allows for fresh deployments in the future without state conflicts. 

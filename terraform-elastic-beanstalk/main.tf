@@ -1,3 +1,15 @@
+/*
+This Terraform configuration is specifically for creating the IAM user and credentials
+for the Elastic Beanstalk environment. This is not a complete Elastic Beanstalk setup.
+
+Note: This configuration has been deprecated in favor of using EKS (Elastic Kubernetes Service)
+for container orchestration. The EKS configuration provides better scalability, security,
+and control over the containerized applications.
+
+The EKS configuration can be found in the terraform-eks-split directory.
+*/
+
+
 # Configure AWS Provider
 provider "aws" {
   region = "eu-north-1"

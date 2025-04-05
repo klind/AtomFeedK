@@ -14,7 +14,7 @@ RUN npm ci
 COPY . .
 
 # Set build-time environment variables with default values
-ARG REACT_APP_API_URL=http://localhost:5000
+ARG REACT_APP_API_URL=http://hcm-developer-util-backend
 ARG REACT_APP_COGNITO_REGION=eu-north-1
 ARG REACT_APP_COGNITO_USER_POOL_ID=eu-north-1_vyUcMe53b
 ARG REACT_APP_COGNITO_APP_CLIENT_ID=43mpnnsk8cb79gs4gjkgii52j9

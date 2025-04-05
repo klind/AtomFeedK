@@ -20,7 +20,7 @@ run_terraform() {
     
     echo ""
     echo "🔄 $description"
-    "$PARENT_DIR/terraform-remote-executor.sh" terraform-eks-split "$command"
+    "./terraform-remote-executor.sh" "." "$command"
     
     if [ $? -ne 0 ]; then
         echo "❌ Error: $description failed"
@@ -66,11 +66,40 @@ run_terraform "apply -target=aws_eks_addon.coredns -target=aws_eks_addon.kube_pr
 # Step 12: Create repositories
 run_terraform "apply -target=aws_ecr_repository.backend -target=aws_ecr_repository.frontend -auto-approve" "Creating repositories"
 
-# Step 13: Apply any remaining resources
+# Step 13: Create service accounts and trust policies
+run_terraform "apply -target=aws_iam_role.backend_service_role -target=aws_iam_role_policy_attachment.dynamodb_access -target=kubernetes_service_account.backend_service_account -auto-approve" "Creating service accounts and trust policies"
+
+# Step 14: Install AWS Load Balancer Controller
+run_terraform "apply -target=aws_iam_policy.lb_controller -target=aws_iam_role.lb_controller_role -target=aws_iam_role_policy_attachment.lb_controller_attachment -target=kubernetes_service_account.lb_controller -target=helm_release.lb_controller -auto-approve" "Installing AWS Load Balancer Controller"
+
+# Step 15: Apply any remaining resources
 run_terraform "apply -auto-approve" "Applying remaining resources"
 
 echo ""
 echo "🎉 EKS infrastructure deployment completed successfully!"
 echo "You can access your cluster using:"
 echo "aws eks update-kubeconfig --name hcm-developer-util-cluster --region eu-north-1"
-echo "" 
+echo ""
+
+# Wait for a bit to allow all resources to fully initialize
+echo "Waiting 60 seconds for AWS resources to fully initialize before validation..."
+sleep 60
+
+# Run the validation script
+echo ""
+echo "🔍 Validating that all resources have been properly created..."
+./validate-deploy.sh
+
+# Capture the validation exit code
+VALIDATE_EXIT_CODE=$?
+
+# Final status message based on validation results
+if [ $VALIDATE_EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "✅ Deployment validated: All resources have been successfully created and are ready to use!"
+else
+    echo ""
+    echo "⚠️ Some resources might not be fully deployed or configured. Please review the validation output above."
+fi
+
+exit $VALIDATE_EXIT_CODE 

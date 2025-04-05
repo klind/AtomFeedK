@@ -1,13 +1,13 @@
 # Backend Kubernetes Deployment Configuration
 # -----------------------------------------
 # This configuration deploys and manages the backend service for the HCM Developer Utility
-# in a Kubernetes cluster. It sets up three main components:
+# in a Kubernetes cluster. It sets up:
 #
 # 1. Deployment:
 #    - Runs the backend application container from ECR
 #    - Maintains 2 replicas for high availability
 #    - Sets resource limits and requests for efficient resource usage
-#    - Configures environment variables for application settings
+#    - Configures environment variables
 #    - Uses ECR image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-backend
 #
 # 2. HorizontalPodAutoscaler (HPA):
@@ -17,14 +17,10 @@
 #      * CPU utilization exceeds 70%
 #      * Memory utilization exceeds 80%
 #
-# 3. Service:
-#    - Creates internal ClusterIP service for pod access
-#    - Exposes port 5000 for internal communication
-#    - Used by frontend to communicate with backend
-#
-# Resource Allocation:
-#    - CPU: 100m (request) to 500m (limit)
-#    - Memory: 256Mi (request) to 512Mi (limit)
+# Environment Configuration:
+#    - Deployed in private subnet for enhanced security
+#    - Exposed via an internal LoadBalancer created by backend-service.yaml
+#    - Accessible to the frontend via Kubernetes DNS
 #
 # Usage:
 # 1. Deploy to Kubernetes cluster:
@@ -33,7 +29,6 @@
 # 2. Monitor deployment:
 #    kubectl get deployment hcm-developer-util-backend
 #    kubectl get hpa hcm-developer-util-backend-hpa
-#    kubectl get service hcm-developer-util-backend
 # -----------------------------------------
 
 apiVersion: apps/v1
@@ -51,6 +46,7 @@ spec:
       labels:
         app: hcm-developer-util-backend
     spec:
+      serviceAccountName: hcm-developer-util-backend-service-account
       containers:
       - name: backend
         image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-backend:latest
@@ -59,15 +55,26 @@ spec:
         resources:
           requests:
             cpu: "100m"
-            memory: "256Mi"
+            memory: "128Mi"
           limits:
-            cpu: "500m"
-            memory: "512Mi"
+            cpu: "200m"
+            memory: "256Mi"
         env:
         - name: NODE_ENV
           value: "dev"
-        - name: TABLE_NAME
-          value: "hcm_atom_feed_employee_local"
+        # Add any other environment variables your backend needs
+        readinessProbe:
+          httpGet:
+            path: /api-docs
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api-docs
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 20
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -98,10 +105,38 @@ apiVersion: v1
 kind: Service
 metadata:
   name: hcm-developer-util-backend
+  namespace: default
+  labels:
+    app: hcm-developer-util-backend
 spec:
   type: ClusterIP
   ports:
-  - port: 5000
-    targetPort: 5000
+  - port: 80             # The port the service listens on
+    targetPort: 5000     # The port your backend container exposes
+    protocol: TCP
   selector:
-    app: hcm-developer-util-backend 
+    app: hcm-developer-util-backend  # This should match your backend pod labels
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hcm-developer-util-backend-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-port: "5000"
+    alb.ingress.kubernetes.io/healthcheck-path: "/api-docs"
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: hcm-developer-util-backend
+            port:
+              number: 80 

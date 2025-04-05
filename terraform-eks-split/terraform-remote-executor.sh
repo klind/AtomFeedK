@@ -7,19 +7,19 @@
 # Usage Examples:
 # -----------------------------
 # 1. Apply Terraform changes with auto-approve:
-#    ./terraform-remote-executor.sh terraform-eks 'apply -auto-approve'
+#    ./terraform-remote-executor.sh terraform-eks-split 'apply -auto-approve'
 #
 # 2. Plan Terraform changes:
-#    ./terraform-remote-executor.sh terraform-eks 'plan'
+#    ./terraform-remote-executor.sh terraform-eks-split 'plan'
 #
 # 3. Destroy infrastructure:
-#    ./terraform-remote-executor.sh terraform-eks 'destroy -auto-approve'
+#    ./terraform-remote-executor.sh terraform-eks-split 'destroy -auto-approve'
 #
 # 4. Initialize with backend reconfiguration:
-#    ./terraform-remote-executor.sh terraform-eks 'init -reconfigure'
+#    ./terraform-remote-executor.sh terraform-eks-split 'init -reconfigure'
 #
 # 5. Apply with variables:
-#    ./terraform-remote-executor.sh terraform-eks 'apply -var="environment=prod" -auto-approve'
+#    ./terraform-remote-executor.sh terraform-eks-split 'apply -var="environment=prod" -auto-approve'
 #
 # Note: Always ensure the terraform-runner EC2 instance is running before executing commands
 # -----------------------------
@@ -28,7 +28,7 @@
 # Requires two arguments: the Terraform directory and the command to execute
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <terraform-directory> <terraform-command>"
-    echo "Example: $0 terraform-eks 'apply -auto-approve'"
+    echo "Example: $0 terraform-eks-split 'apply -auto-approve'"
     exit 1
 fi
 
@@ -45,9 +45,8 @@ TF_CMD=$2
 # Note: The instance ID is created when running terraform-runner.tf
 # This only needs to be done once to set up the infrastructure
 
-cd terraform-runner
+# Hardcode the instance ID since we're no longer navigating to terraform-runner
 INSTANCE_ID=i-0b9b4ceb79a265a52
-cd - > /dev/null
 
 # Define S3 bucket for file transfer
 # This bucket is used as an intermediate storage for Terraform files
@@ -61,7 +60,17 @@ echo "Command: terraform $TF_CMD"
 # Package Terraform configuration files
 # Creates a zip archive of all files in the specified Terraform directory
 echo "📦 Packaging Terraform files..."
-cd terraform-eks && zip -r ../terraform-files.zip * && cd ..
+
+# Check if we're using the current directory or a specified one
+if [ "$TF_DIR" = "." ]; then
+    # We're already in the right directory
+    zip -r ../terraform-files.zip *
+    cd ..
+else
+    # Navigate to the specified directory
+    CURRENT_DIR=$(pwd)
+    cd "$TF_DIR" && zip -r "$CURRENT_DIR/terraform-files.zip" * && cd "$CURRENT_DIR"
+fi
 
 # Upload the zip file to S3 bucket
 # This makes the Terraform files accessible to the EC2 instance
@@ -104,7 +113,7 @@ rm terraform-files.zip
 #    Output is appended to the log file
 #
 # Note: To monitor execution in real-time, you can SSH into the EC2:
-#    aws ssm start-session --target i-074a9631a2132a1d3 (You need to get the instance ID from AWS)
+#    aws ssm start-session --target $INSTANCE_ID
 #    Inside the EC2 instance, run the following command to view the log file:
 #    sudo su - ec2-user
 #    tail -f /var/log/terraform/terraform.log

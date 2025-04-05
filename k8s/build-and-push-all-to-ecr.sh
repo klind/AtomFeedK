@@ -58,7 +58,7 @@ export DOCKER_BUILDKIT=1
 
 # Build and push backend
 echo -e "\n📦 Building and pushing backend image..."
-cd backend
+cd ../backend
 if [ -f "build-and-push-to-ecr.sh" ]; then
     ./build-and-push-to-ecr.sh
 else
@@ -76,8 +76,8 @@ else
     exit 1
 fi
 
-# Return to root directory
-cd ..
+# Return to k8s directory
+cd ../k8s
 
 # Show ECR repository status
 echo -e "\n📊 ECR Repository Status:"

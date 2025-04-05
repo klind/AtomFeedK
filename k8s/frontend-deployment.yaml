@@ -73,7 +73,18 @@ spec:
             memory: "256Mi"
         env:
         - name: REACT_APP_API_URL
-          value: "http://hcm-developer-util-backend:5000"
+          # The backend is now accessed via its Kubernetes service name
+          # This remains consistent across deployments and doesn't need to be updated
+          # when infrastructure changes
+          value: "http://hcm-developer-util-backend"
+        - name: REACT_APP_COGNITO_REGION
+          value: "eu-north-1"
+        - name: REACT_APP_COGNITO_USER_POOL_ID
+          value: "eu-north-1_vyUcMe53b"
+        - name: REACT_APP_COGNITO_APP_CLIENT_ID
+          value: "43mpnnsk8cb79gs4gjkgii52j9"
+        - name: REACT_APP_ENVIRONMENT
+          value: "dev"
         - name: NODE_ENV
           value: "dev"
 ---
@@ -107,9 +118,31 @@ kind: Service
 metadata:
   name: hcm-developer-util-frontend
 spec:
-  type: LoadBalancer  # Using LoadBalancer to expose frontend externally
+  type: ClusterIP  # Changed to ClusterIP as we'll use Ingress for external access
   ports:
   - port: 80
     targetPort: 80
   selector:
-    app: hcm-developer-util-frontend 
+    app: hcm-developer-util-frontend
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hcm-developer-util-frontend-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: hcm-developer-util-frontend
+            port:
+              number: 80 

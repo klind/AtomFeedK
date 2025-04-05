@@ -1,3 +1,16 @@
+resource "aws_launch_template" "eks_nodes" {
+  name_prefix            = "hcm-developer-util-eks-node-"
+  description            = "EKS Node Launch Template"
+  update_default_version = true
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "hcm-developer-util-eks-node"
+    }
+  }
+}
+
 resource "aws_eks_node_group" "simple" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "hcm-developer-util-eks-node-group"
@@ -18,8 +31,11 @@ resource "aws_eks_node_group" "simple" {
   # Add capacity type
   capacity_type = "ON_DEMAND"
   
-  # Add disk size
-  disk_size = 20
+  # Use the launch template instead of direct disk_size parameter
+  launch_template {
+    id      = aws_launch_template.eks_nodes.id
+    version = aws_launch_template.eks_nodes.latest_version
+  }
   
   # Add update config to control node updates
   update_config {
@@ -34,7 +50,6 @@ resource "aws_eks_node_group" "simple" {
   
   # Tags for better integration with cluster autoscaler and other tools
   tags = {
-    "Name" = "hcm-developer-util-eks-node"
     "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "owned"
   }
   
