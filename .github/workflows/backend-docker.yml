@@ -1,0 +1,60 @@
+name: Backend Docker Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - 'backend/**'
+      - '!backend/**/*.md'
+      - '!backend/**/*.MD'
+      - '!backend/docs/**'
+      - '!backend/**/*.txt'
+      - '!backend/.gitignore'
+  #pull_request:
+  #  branches: [ "master" ]
+  #  paths:
+  #    - 'backend/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-backend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Read package.json and extract version
+      - name: Read package.json
+        id: package_version
+        run: |
+          VERSION=$(node -p "require('./backend/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # For debugging - print the version to verify
+      - name: Debug version
+        run: echo "Package.json version is ${{ steps.package_version.outputs.version }}"
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}-backend:${{ steps.package_version.outputs.version }}-build.${{ github.run_number }}
+            ${{ env.REGISTRY }}/${{ github.repository }}-backend:latest
+          file: ./backend/Dockerfile 

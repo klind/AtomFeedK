@@ -1,0 +1,8 @@
+{
+  "apiUrl": "https://http://hcmeventdeveloperutil.eba-rwxupczj.eu-north-1.elasticbeanstalk.com/",
+  "cognito": {
+    "region": "eu-north-1",
+    "userPoolId": "eu-north-1_vyUcMe53b",
+    "appClientId": "43mpnnsk8cb79gs4gjkgii52j9"
+  }
+}

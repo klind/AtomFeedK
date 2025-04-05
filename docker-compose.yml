@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atomfeed-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ~/.aws:/home/node/.aws:ro
+    environment:
+      - NODE_ENV=local
+      - LOG_LEVEL=debug
+      - PORT=5000
+      - TABLE_NAME=hcm_atom_feed_employee_local
+      - AWS_REGION=eu-north-1
+      - COGNITO_USER_POOL_ID=eu-north-1_vyUcMe53b
+      - COGNITO_APP_CLIENT_ID=43mpnnsk8cb79gs4gjkgii52j9
+    restart: unless-stopped
+    networks:
+      - atomfeed-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:5000
+        - REACT_APP_ENVIRONMENT=local
+        - REACT_APP_COGNITO_REGION=eu-north-1
+        - REACT_APP_COGNITO_USER_POOL_ID=eu-north-1_vyUcMe53b
+        - REACT_APP_COGNITO_APP_CLIENT_ID=43mpnnsk8cb79gs4gjkgii52j9
+    container_name: atomfeed-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - atomfeed-network
+
+networks:
+  atomfeed-network:
+    driver: bridge 

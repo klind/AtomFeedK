@@ -1,0 +1,15 @@
+commands
+
+
+EB command
+
+# tail the application log on the EC2 instance
+# run eb ssh from the backend folder
+eb ssh 
+sudo tail -f /var/log/web.stdout.log
+
+# deploy the backend to EB, run it from the backend folder
+eb deploy
+
+
+

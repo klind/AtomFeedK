@@ -1,0 +1,115 @@
+# Frontend Kubernetes Deployment Configuration
+# -----------------------------------------
+# This configuration deploys and manages the frontend service for the HCM Developer Utility
+# in a Kubernetes cluster. It sets up three main components:
+#
+# 1. Deployment:
+#    - Runs the frontend React application container from ECR
+#    - Maintains 2 replicas for high availability
+#    - Sets resource limits and requests for efficient resource usage
+#    - Configures environment variables including backend API URL
+#    - Uses ECR image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-frontend
+#
+# 2. HorizontalPodAutoscaler (HPA):
+#    - Automatically scales pods based on resource utilization
+#    - Maintains between 2 and 10 replicas
+#    - Scales up when:
+#      * CPU utilization exceeds 70%
+#      * Memory utilization exceeds 80%
+#
+# 3. Service:
+#    - Creates LoadBalancer service for external access
+#    - Exposes port 80 for HTTP traffic
+#    - Provides external access to the application
+#
+# Resource Allocation:
+#    - CPU: 100m (request) to 200m (limit)
+#    - Memory: 128Mi (request) to 256Mi (limit)
+#
+# Environment Configuration:
+#    - Connects to backend via internal service name
+#    - Configured for development environment
+#
+# Usage:
+# 1. Deploy to Kubernetes cluster:
+#    kubectl apply -f frontend-deployment.yaml
+#
+# 2. Monitor deployment:
+#    kubectl get deployment hcm-developer-util-frontend
+#    kubectl get hpa hcm-developer-util-frontend-hpa
+#    kubectl get service hcm-developer-util-frontend
+#
+# 3. Access application:
+#    - Get LoadBalancer external IP/hostname:
+#      kubectl get service hcm-developer-util-frontend
+# -----------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hcm-developer-util-frontend
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hcm-developer-util-frontend
+  template:
+    metadata:
+      labels:
+        app: hcm-developer-util-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-frontend:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://hcm-developer-util-backend:5000"
+        - name: NODE_ENV
+          value: "dev"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hcm-developer-util-frontend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hcm-developer-util-frontend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hcm-developer-util-frontend
+spec:
+  type: LoadBalancer  # Using LoadBalancer to expose frontend externally
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: hcm-developer-util-frontend 

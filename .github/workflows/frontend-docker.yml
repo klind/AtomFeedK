@@ -1,0 +1,59 @@
+name: Frontend Docker Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - 'frontend/**'
+      - '!frontend/**/*.md'
+      - '!frontend/**/*.MD'
+      - '!frontend/docs/**'
+      - '!frontend/**/*.txt'
+      - '!frontend/.gitignore'
+     
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Read package.json and extract version
+      - name: Read package.json
+        id: package_version
+        run: |
+          VERSION=$(node -p "require('./frontend/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # For debugging - print the version to verify
+      - name: Debug version
+        run: echo "Package.json version is ${{ steps.package_version.outputs.version }}"
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}-frontend:${{ steps.package_version.outputs.version }}-build.${{ github.run_number }}
+            ${{ env.REGISTRY }}/${{ github.repository }}-frontend:latest
+          file: ./frontend/Dockerfile
+          build-args: |
+            REACT_APP_API_URL=http://localhost:5000
+            REACT_APP_ENVIRONMENT=local 

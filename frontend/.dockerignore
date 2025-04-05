@@ -1,0 +1,44 @@
+# Node modules and logs
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Build directory
+build
+dist
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git and CI
+.git
+.github
+.gitignore
+
+# Testing
+coverage
+.nyc_output
+
+# Deployment scripts and configs
+deploy-*.sh
+cloudfront-info.txt
+
+# Misc
+README.md
+LICENSE
+*.md 

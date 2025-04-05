@@ -1,0 +1,107 @@
+# Backend Kubernetes Deployment Configuration
+# -----------------------------------------
+# This configuration deploys and manages the backend service for the HCM Developer Utility
+# in a Kubernetes cluster. It sets up three main components:
+#
+# 1. Deployment:
+#    - Runs the backend application container from ECR
+#    - Maintains 2 replicas for high availability
+#    - Sets resource limits and requests for efficient resource usage
+#    - Configures environment variables for application settings
+#    - Uses ECR image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-backend
+#
+# 2. HorizontalPodAutoscaler (HPA):
+#    - Automatically scales pods based on resource utilization
+#    - Maintains between 2 and 10 replicas
+#    - Scales up when:
+#      * CPU utilization exceeds 70%
+#      * Memory utilization exceeds 80%
+#
+# 3. Service:
+#    - Creates internal ClusterIP service for pod access
+#    - Exposes port 5000 for internal communication
+#    - Used by frontend to communicate with backend
+#
+# Resource Allocation:
+#    - CPU: 100m (request) to 500m (limit)
+#    - Memory: 256Mi (request) to 512Mi (limit)
+#
+# Usage:
+# 1. Deploy to Kubernetes cluster:
+#    kubectl apply -f backend-deployment.yaml
+#
+# 2. Monitor deployment:
+#    kubectl get deployment hcm-developer-util-backend
+#    kubectl get hpa hcm-developer-util-backend-hpa
+#    kubectl get service hcm-developer-util-backend
+# -----------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hcm-developer-util-backend
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hcm-developer-util-backend
+  template:
+    metadata:
+      labels:
+        app: hcm-developer-util-backend
+    spec:
+      containers:
+      - name: backend
+        image: 084828595145.dkr.ecr.eu-north-1.amazonaws.com/hcm-developer-util-backend:latest
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        env:
+        - name: NODE_ENV
+          value: "dev"
+        - name: TABLE_NAME
+          value: "hcm_atom_feed_employee_local"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hcm-developer-util-backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hcm-developer-util-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hcm-developer-util-backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    app: hcm-developer-util-backend 
